@@ -1,5 +1,5 @@
 #include	<stdio.h>
-main()	{
+int	main()	{
 int
 n
 ,
@@ -14,6 +14,9 @@ testcopy
 found
 ,
 max
+;
+n	=
+0
 ;
 test	=
 2

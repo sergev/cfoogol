@@ -1,0 +1,724 @@
+From: cowan@snark.thyrsus.com (John Cowan)
+Newsgroups: comp.sources.misc
+Subject: v42i088: cfoogol - A compiler for a tiny ALGOL-like language, Part01/01
+Date: 8 May 1994 14:43:25 -0500
+Organization: Sterling Software
+Sender: kent@sparky.sterling.com
+Approved: kent@sparky.sterling.com
+Message-ID: <2qjfct$645@sparky.sterling.com>
+X-Md4-Signature: bd3f761f9e92eb8683f8e819fbdfeb03
+
+Submitted-by: cowan@snark.thyrsus.com (John Cowan)
+Posting-number: Volume 42, Issue 88
+Archive-name: cfoogol/part01
+Environment: C
+
+This is an upgrade of the FOOGOL compiler originally posted to mod.sources,
+and now available in volume 8 of comp.sources.unix.  It seems to me, however,
+that it is better suited to comp.sources.misc.  This version generates C
+rather than VAX assembly language output.  The FOOGOL language is unchanged.
+
+Since the whole thing exists purely for hack value, I have not bothered with
+Makefiles, READMEs, or other such.  The original poster didn't either.
+Read foogol.doc to know everything I do about the entire project; conversion
+to C was so easy that I didn't even have to fully understand foogol.c
+
+John Cowan
+Logical Language Group
+<cowan@snark.thyrsus.com>
+----------
+#! /bin/sh
+# This is a shell archive.  Remove anything before this line, then feed it
+# into a shell via "sh file" or similar.  To overwrite existing files,
+# type "sh file -c".
+# Contents:  foogol.c foogol.doc
+# Wrapped by kent@sparky on Sun May  8 14:39:05 1994
+PATH=/bin:/usr/bin:/usr/ucb:/usr/local/bin:/usr/lbin:$PATH ; export PATH
+echo If this archive is complete, you will see the following message:
+echo '          "shar: End of archive 1 (of 1)."'
+if test -f 'foogol.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'foogol.c'\"
+else
+  echo shar: Extracting \"'foogol.c'\" \(11483 characters\)
+  sed "s/^X//" >'foogol.c' <<'END_OF_FILE'
+X/*---------------------------------------------------------------------*\
+X!                                                                       !
+X!  fc.c  Compiler for FOOGOL IV -- version 5.0  Last change:1994-01-12  !
+X!        Translates FOOGOL IV into stupid but portable C                !
+X!                                                                       !
+X!    Written by Per Lindberg, QZ, Box 27322, 10254 Stockholm, Sweden.   !
+X!    C code generation by John Cowan <cowan@snark.thyrsus.com>          !
+X!                                                                       !
+X!    This software is in the public domain. The Hacker Ethic applies.   !
+X!    (A postcard from anyone who ports it would be appreciated.)        !
+X!                                                                       !
+X\*---------------------------------the-mad-programmer-strikes-again----*/
+X
+X#define UNIX
+X
+X
+X#include <stdio.h>
+X
+X#define isupper(c) ((c) >= 'A' && (c) <= 'Z')
+X#define tolower(c) ((c) - 'A' + 'a')
+X
+X#define MAXTAB     25           /* Tweak these to your own liking  */
+X#define MAXTOKEN   80
+X
+X#define WHITESPACE  0           /* These could be turned into enum */
+X#define NUMBER      1
+X#define LETTER      2
+X#define QUOTE       3
+X#define SEMICOLON   4
+X#define RANDOM      5
+X
+XFILE *inf, *outf;
+X
+Xint labelcount = 0,
+X    linecount  = 0,
+X    debug      = 0;
+X
+Xchar token[MAXTOKEN],
+X     pending[MAXTOKEN],
+X     keytab[MAXTAB][MAXTOKEN],
+X     symtab[MAXTAB][MAXTOKEN],
+X     *usage =
+X     "usage: 'fc [-debug] infile [outfile]'";
+X
+Xmain(argc,argv) int argc; char *argv[]; {
+X  if (argc < 2) error(usage);
+X  if (*argv[1] == '-') { debug = 1; --argc; ++argv; }
+X  if (argc < 2) error(usage);
+X  openinfile(argv[1]);
+X  openoutfile(argv[argc == 2 ? 1 : 2]);
+X  init();
+X  if (!PROGRAM()) error("Syntax error");
+X  fclose(inf);
+X  fclose(outf);
+X}
+X
+Xchar *defaultext(fname,ext,force) char *fname, *ext; int force; {
+X  static char result[255];
+X  char c, *point, *s = result;
+X  strcpy(result,fname);
+X  while (*s) ++s;
+X  point = s;
+X  while (c = *s, s > result && c != '.') --s;
+X  if (c == '.') {                                /* some extension exists */
+X    point = s;
+X    if (!force) return result;            /* don't worry about what it is */
+X  }
+X  strcpy(point,ext);                 /* put default extension after point */
+X  return result;
+X}
+X
+Xopeninfile(fname) char *fname; {
+X  char *defaultext();
+X  d("openinfile",defaultext(fname,".foo",0),"");
+X  if ((inf = fopen(defaultext(fname,".foo",0),"r")) == NULL)
+X    error2("Can't open infile", defaultext(fname,".foo",0));
+X}
+X
+Xopenoutfile(fname) char *fname; {
+X  char *defaultext();
+X  d("openoutfile",defaultext(fname,".c",1),"");
+X  if ((outf = fopen(defaultext(fname,".c",1),"w")) == NULL)
+X    error2("Can't open outfile", defaultext(fname,".c",1));
+X}
+X
+Xinit() {
+X  int i;
+X  d("init","","");
+X  get2();
+X  gettoken();
+X  for (i = 0; i < MAXTAB; i++) keytab[i][0] = '\0';
+X}
+X
+Xerror(msg) char *msg; {
+X  printf("\n\nFoo: %s", msg);
+X  if (linecount) printf(" at line %d",linecount + 1);
+X  printf("\n");
+X  exit(1);
+X}
+X
+Xerror2(s1,s2) char *s1,*s2; {
+X  static char msg[80];
+X  sprintf(msg,"%s\"%s\"",s1,s2);
+X  error(msg);
+X}
+X
+Xlowcase(s) char *s; {
+X  char c;
+X  for (c = *s; c = *s; ++s) if (isupper(c)) *s = tolower(c);
+X}
+X
+X/* Basic I/O functions */
+X
+Xint out(line) char *line; {
+X  char c, symb[MAXTOKEN], *subst(), *s = symb;
+X  int printmode = 1, chmode = 1;
+X  while(c = *line++) {
+X    if (c == ' ') { if (chmode) putc('\t',outf);
+X                    chmode = 0;
+X    } else {
+X      chmode = 1;
+X      if (c != 39) { if (printmode) putc(c,outf);
+X                     else           *s++ = c;
+X      } else if (!printmode) {
+X             *s = '\0';
+X             if (*symb) fprintf(outf,"%s",subst(symb));
+X             printmode = 1;
+X           } else {
+X             printmode = 0;
+X             s = symb;
+X           }
+X    }
+X  }
+X  putc('\n',outf);
+X  return 1;
+X}
+X
+Xgettoken() {
+X  strcpy(token,pending); get2();
+X  if (!strcmp("/",token) && !strcmp("*",pending)) {
+X    d("comment:",token,pending);
+X    while (strcmp("*",token) || strcmp("/",pending)) {
+X      strcpy(token,pending); get2();
+X      d("        ",token,"");
+X    }
+X    strcpy(token,pending); get2();
+X    strcpy(token,pending); get2();
+X  }
+Xd("gettoken returning",token,pending);
+X}
+X
+Xget2() {
+X  int c0, c, typ, count = 1;
+X  char *p = pending;
+X  while((typ=type(c0=getc(inf))) == WHITESPACE) if (c0 == '\n') ++linecount;
+X  if (c0 != EOF) *p++ = c0;
+X  if (typ == QUOTE) {
+X    while ((c = getc(inf)) != EOF && type(c) != QUOTE) {
+X      if (++count == MAXTOKEN) error("String too long");
+X      *p++ = c;
+X    }
+X    *p++ = '"';
+X  }
+X  else {
+X    while ((type(c=getc(inf)) == typ
+X            || typ == LETTER && type(c) == NUMBER)
+X	    && typ != RANDOM
+X            && c != EOF) {
+X      *p++ = c;
+X      typ = type(c);
+X      if (++count == MAXTOKEN) error("Too long input token");
+X    }
+X    ungetc(c,inf);
+X  }
+X  *p = '\0';  
+X}
+X
+Xint type(c) int c; {
+X  if (c == EOF) return -1;
+X  if (c >= '0' && c <= '9') return(NUMBER);
+X  if (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') return(LETTER);
+X  if (c == ' ' || c == '\t' || c == '\n') return(WHITESPACE); /*  */
+X  if (c == '"') return (QUOTE);
+X  if (c == ';') return (SEMICOLON);
+X  return(RANDOM);
+X}
+X
+X/* Basic input matching functions */
+X
+Xint match(s) char *s; {
+Xd("match",token,s);
+X  lowcase(token);
+X  if (strcmp(s,token)) return 0;
+X  gettoken();          return 1;
+X}
+X
+Xint id(name) char *name; {
+X  int t;
+X  char c, *p = token;
+X  d("id",token,name);
+X  if (type(*p++) != LETTER) return 0;
+X  while (c = *p++) {
+X    t = type(c);
+X    if (t != NUMBER && t != LETTER) return(0);
+X  }
+X  lowcase(token);
+X  enter(name,token);
+X  gettoken();
+X  return(1);
+X}
+X
+Xint number(name) char *name; {
+X  char c, *p = token;
+X  d("number",token,name);
+X  while (c = *p++) if (type(c) != NUMBER) return(0);
+X  enter(name,token);
+X  gettoken();
+X  return(1);
+X}
+X
+Xint string(name) char *name; {
+X  d("string",token,name);
+X  if (*token != '"') return 0;
+X  enter(name,token);
+X  gettoken();
+X  return 1;
+X}
+X
+Xlabel(name) char *name; {
+X  char result[6];
+X  d("label ",name,"");
+X  sprintf(result,"L%d",labelcount++);
+X  enter(name,result);
+X}
+X
+X/* Internal symbol table */
+X
+Xenter(key,val) char *key, *val; {
+X  int i;
+X  d("enter ",val,key);
+X  for (i = 0; i < MAXTAB; i++) {
+X    if (keytab[i][0] == '\0') {
+X      strcpy(keytab[i],key);
+X      strcpy(symtab[i],val);
+X      return;
+X    }
+X  }
+X  error2("INTERNAL SYMTAB ENTER ERROR, can't enter ", val);
+X}
+X
+Xint lookup(key) char *key; {
+X  int i;
+X  for (i = MAXTAB-1; i >= 0 ; i--) {
+X    if (!strcmp(key,keytab[i])) {
+X      d("lookup ",symtab[i],key);
+X      return i;
+X    }
+X  }
+X  error2("INTERNAL SYMTAB LOOKUP ERROR, can't find ", key);
+X}
+X
+Xchar *subst(key) char *key; {
+X  return symtab[lookup(key)];
+X}
+X
+XRemove(key) char *key; {
+X  keytab[lookup(key)][0] = '\0';
+X}
+X
+X/* Syntax definition. This is the neat part! */
+X
+Xint PROGRAM() { d("PROGRAM",token,pending);
+X  if (!match("begin"))	return 0;	out("#include <stdio.h>");
+X                                        out("main() {");
+X  if (!OPT_DECLARATION()) return 0;
+X  if (!STATEMENT())	return 0;
+X  while (match(";"))
+X    if (!STATEMENT())	return 0;
+X  if (!match("end"))	return 0;	out("}");
+X  return 1;
+X}
+X
+Xint OPT_DECLARATION() { d("OPT_DECLARATION",token,pending);
+X  if (DECLARATION()
+X  && !match(";")) return 0;
+X  return 1;
+X}
+X
+Xint DECLARATION() { d("DECLARATION",token,pending);
+X  if (!match("integer")) return 0;	out("int");
+X  if (!ID_SEQUENCE())	 return 0;	out(";");
+X  return 1;
+X}
+X
+Xint ID_SEQUENCE() { d("ID_SEQUENCE",token,pending);
+X  if (!IDENTIFIER())	return 0;
+X  while (match(",")) {
+X   out(",");
+X    if (!IDENTIFIER())	return 0;
+X	}
+X  return 1;
+X}
+X
+Xint IDENTIFIER() { d("IDENTIFIER",token,pending);
+X  if (!id("X"))	return 0;		out("'X'");
+X					Remove("X");
+X  return 1;
+X}
+X
+Xint STATEMENT() { d("STATEMENT",token,pending);
+X  return
+X  IO_STATEMENT()
+X  ||
+X  WHILE_STATEMENT()
+X  ||
+X  COND_STATEMENT()
+X  ||
+X  BLOCK()
+X  ||                     /* the order is important here */
+X  ASSIGN_STATEMENT();
+X}
+X
+Xint BLOCK() { d("BLOCK",token,pending);
+X  if (!match("begin"))	return 0;	out("{");
+X  if (DECL_OR_ST())
+X    while(match(";"))
+X     if (!STATEMENT())	return 0;
+X  if (!match("end"))	return 0;	out("}");
+X  return 1;
+X}
+X
+Xint DECL_OR_ST() { d("DECL_OR_ST",token,pending);
+X  return
+X  DECLARATION()
+X  ||
+X  STATEMENT();
+X}
+X
+Xint IO_STATEMENT() { d("IO_STATEMENT",token,pending);
+X  return
+X  PRINTS_STATEMENT()
+X  ||
+X  PRINTN_STATEMENT()
+X  ||
+X  PRINT_STATEMENT();
+X}
+X
+Xint PRINTS_STATEMENT() { d("PRINTS_STATEMENT",token,pending);
+X  if (!match("prints")) return 0;
+X  if (!match("("))	return 0;
+X  if (!string("S"))	return 0;	
+X					out("printf(\"%s\", 'S');");
+X					Remove("S"); 
+X  if (!match(")"))	return 0;
+X  return 1;
+X}
+X
+Xint PRINTN_STATEMENT() { d("PRINTN_STATEMENT",token,pending);
+X  if (!match("printn")) return 0;
+X  if (!match("("))	return 0;       out("printf(\"%d\",");
+X  if (!EXPRESSION())	return 0;	out(");");
+X  if (!match(")"))	return 0;
+X  return 1;
+X}
+X
+Xint PRINT_STATEMENT() { d("PRINT_STATEMENT",token,pending);
+X  if (!match("print"))	return 0;	out("printf(\"\\n\");");
+X  return 1;
+X}
+X
+Xint COND_STATEMENT() { d("COND_STATEMENT",token,pending);
+X  if (!match("if"))	return 0;	out("if (");
+X  if (!EXPRESSION())	return 0;	out(")");
+X  if (!match("then"))	return 0;	
+X  if (!STATEMENT())	return 0;	
+X  if (match("else")) {
+X     out (" else");
+X    if (!STATEMENT())	return 0;	
+X	}
+X  return 1;
+X}
+X
+Xint WHILE_STATEMENT() { d("WHILE_STATEMENT",token,pending);
+X  if (!match("while"))	return 0;	
+X                                        out("while(");
+X  if (!EXPRESSION())	return 0;	out(")");
+X  if (!match("do"))	return 0;	
+X  if(!STATEMENT())	return 0;	
+X  return 1;
+X}
+X
+Xint ASSIGN_STATEMENT() { d("ASSIGN_STATEMENT",token,pending);
+X  if (!id("Var"))	return 0;       out("'Var' =");
+X  if (!match(":"))	return 0;
+X  if (!match("="))	return 0;
+X  if (!EXPRESSION())	return 0;	out(";");
+X					Remove("Var");
+X  return 1;
+X}
+X
+Xint EXPRESSION() { d("EXPRESSION",token,pending);
+X  if (!EXPR1())		return 0;
+X  if (!OPT_RHS())	return 0;
+X  return 1;
+X}
+X
+Xint OPT_RHS() { d("OPT_RHS",token,pending);
+X  return
+X  RHS_EQ()
+X  ||
+X  RHS_NEQ()
+X  ||
+X  1;
+X}
+X
+Xint RHS_EQ() { d("RHS_EQ",token,pending);
+X  if (!match("="))	return 0;	
+X					out("==");
+X  if (!EXPR1())		return 0;	
+X  return 1;
+X}
+X
+Xint RHS_NEQ() { d("RHS_NEQ",token,pending);
+X  if (!match("#"))	return 0;	
+X					out("!=");
+X  if (!EXPR1())		return 0;	
+X  return 1;
+X}
+X
+Xint SIGNED_TERM() { d("SIGNED_TERM",token,pending);
+X  return
+X  PLUS_TERM()
+X  ||
+X  MINUS_TERM();
+X}
+X
+Xint PLUS_TERM() { d("PLUS_TERM",token,pending);
+X  if (!match("+"))	return 0;	out("+");      
+X  if (!TERM())		return 0;	
+X  return 1;
+X}
+X
+Xint MINUS_TERM() { d("MINUS_TERM",token,pending);
+X  if (!match("-"))	return 0;	out("-");
+X  if (!TERM())		return 0;	
+X  return 1;
+X}
+X
+Xint TERM() { d("TERM",token,pending);
+X  if (!PRIMARY())	return 0;
+X  while (match("*")) {			out("*");
+X    if (!PRIMARY())	return 0;	
+X  }
+X  return 1;
+X}
+X
+Xint PRIMARY() { d("PRIMARY",token,pending);
+X  if (id("Z")) {			out("'Z'");       
+X					Remove("Z");
+X    return 1;
+X  }
+X  if (number("Z")) {			out("'Z'");
+X					Remove("Z");
+X    return 1;
+X  }
+X  if (match("(")) {
+X      out("(");
+X    if (!EXPRESSION())	return 0;
+X    if (!match(")"))	return 0;
+X       out(")");
+X    return 1;
+X  }
+X  return 0;
+X}
+X
+Xint EXPR1() { d("EXPR1",token,pending);
+X  if (!TERM())		return 0;
+X  while(SIGNED_TERM());
+X  return 1;
+X}
+X
+X/* And finally, the debug function... */
+X
+Xint d(s1,s2,s3) char *s1,*s2,*s3; {
+X  if (debug) {
+X    printf("%s",s1);
+X    if (*s2) printf(" \"%s\"",s2);
+X    if (*s3) printf(" \"%s\"",s3);
+X    putchar('\n');
+X  }
+X  return 1;
+X}
+END_OF_FILE
+  if test 11483 -ne `wc -c <'foogol.c'`; then
+    echo shar: \"'foogol.c'\" unpacked with wrong size!
+  fi
+  # end of 'foogol.c'
+fi
+if test -f 'foogol.doc' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'foogol.doc'\"
+else
+  echo shar: Extracting \"'foogol.doc'\" \(4086 characters\)
+  sed "s/^X//" >'foogol.doc' <<'END_OF_FILE'
+Xfc.doc						Last modified: 1994-01-12
+X
+X
+X			The FOOGOL-IV compiler
+X		   release notes and documentation
+X			   Per Lindberg, QZ
+X                  The mad programmer strikes again!
+X
+X                        Version 5.0 changes by
+X                 John Cowan <cowan@snark.thyrsus.com>
+X
+XNAME
+X	fc - foogol compiler
+X
+XSYNOPSIS
+X	fc [ -d ] infile [ outfile ]
+X
+XDESCRIPTION
+X	fc compiles a foogol program into ugly but portable C.
+X	Default extensions are ".foo" for the source file and ".c"
+X	for the compiled file. In other words, the resulting outfile
+X	is C language, and can be assembled and linked with the
+X        vanilla UNIX cc program.
+X
+X	Options: (There is only one switch so far...)
+X
+X	-d	Sets the debug option, which makes the compiler print
+X		out internal diagnostics. Useful for debugging and
+X		understanding the compiler.
+X
+X	The foogol object code has to be linked
+X	with the C library in order to be able to do I/O.
+X	Example:
+X		fc foo
+X		cc foo.c -o foo
+X
+X        You can make the C code more readable with:
+X                cb -j -s foo.c
+X        which eliminates superfluous newlines and imposes K&R style.
+X
+X	The foogol language is basically a very small ALGOL. The
+X	current syntactic elements are:
+X
+X	PROGRAM ::=		begin
+X				[ DECLARATION ; ]
+X				STATEMENT [ ; STATEMENT ]...
+X				end
+X
+X	DECLARATION	::=	integer ID_SEQUENCE
+X
+X	ID_SEQUENCE	::=	IDENTIFIER [ , IDENTIFIER ]
+X
+X	STATEMENT	::=	IO_STATEMENT
+X			!	WHILE_STATEMENT
+X			!	COND_STATEMENT
+X			!	BLOCK
+X			!	ASSIGN_STATEMENT
+X
+X	BLOCK	    ::=		begin
+X				[ DECLARATION ]
+X				[ ; STATEMENT ]...
+X				end
+X
+X	IO_STATEMENT	::=	prints ( STRING )
+X			!	printn ( EXPRESSION )
+X			!	print
+X
+X	COND_STATEMENT	::=	if EXPRESSION then STATEMENT
+X				[ else STATEMENT ]
+X
+X	WHILE_STATEMENT	::=	while EXPRESSION do STATEMENT
+X
+X	ASSIGN_STATEMENT::=	IDENTIFIER := EXPRESSION
+X
+X	EXPRESSION	::=	EXPR1 [ RHS ]
+X
+X	RHS		::=	= EXPR1
+X			!	# EXPR1
+X
+X	SIGNED_TERM	::=	+ TERM
+X			!	- TERM
+X
+X	TERM		::=	PRIMARY [ * PRIMARY ]...
+X
+X	PRIMARY		::=	IDENTIFIER
+X			!	NUMBER
+X			!	( EXPRESSION )
+X
+X	EXPR1		::=	TERM [ SIGNED_TERM ]...
+X
+X	IDENTIFIER	::=	<the usual thing, and no word reserved>
+X
+X	NUMBER		::=	<the usual thing, unsigned integers>
+X
+X	STRING		::=	<the usual thing>
+X
+X	Example program:
+X
+X	begin
+X	  integer n, div, sub, test, testcopy, found, max;
+X	  test := 2; max := 10; /* number of primes wanted */
+X	  while n # max do begin
+X	    div:= test-1; found:= 0;
+X	    while div-1 do begin
+X	      testcopy:= test; sub:= 0;
+X	      while testcopy do begin
+X	        sub:= sub+1; if sub = div then sub:= 0;
+X	        testcopy:= testcopy-1
+X	      end;
+X	      if sub = 0 then found:= 1;
+X	      div:= div-1
+X	    end;
+X	    if found = 0 then begin
+X	      n:= n+1;
+X	      printn(test); prints(" is prime number "); printn(n); print
+X	    end;
+X	    test:= test+1
+X	  end
+X	end
+X
+X	The syntax is highly flexible, which means it might easily be
+X	changed due to some whim. The source code should be checked
+X	for details and changes before bugs are reported.
+X
+X	The compiler is written by Per Lindberg, and placed in the
+X	public domain. The Hacker's Ethic applies. It is based on the
+X	VALGOL I compiler published by G.A. Edgar in Dr. Dobb's
+X	Journal May 1985. It was implemented for the purpose of
+X	demonstrating how a simple compiler works. Therefore, there
+X	are no optimizations or other frills. You might want to add
+X	things to it; go right ahead. Happy hacking!
+X
+X        This version (5.0) is the first to generate C.  Previous versions
+X        generated Unix-style assembly language for the VAX.  Since
+X        VAXen are nearly defunct, C seemed a better choice of output
+X        language.  The necessary changes were very easy.
+X
+XFILES
+X	fc.c	Source code for the foogol compiler
+X	fc	The foogol compiler
+X	fc.doc	This file
+X	bar.foo	Your program...
+X
+XSEE ALSO
+X	cc, cb
+X
+XBUGS
+X
+X	Because parsing is by simple recursive-descent and backtracking,
+X	there is only one cheerful error message: "Syntax error". No
+X	hints on missing or superflous semicolons or such hand-holding.
+X	You're supposed to write correct programs in foogol, Buster!
+X
+X	Please remember that this is just a 500-line toy
+X	compiler, so don't expect too much of it.
+END_OF_FILE
+  if test 4086 -ne `wc -c <'foogol.doc'`; then
+    echo shar: \"'foogol.doc'\" unpacked with wrong size!
+  fi
+  # end of 'foogol.doc'
+fi
+echo shar: End of archive 1 \(of 1\).
+cp /dev/null ark1isdone
+MISSING=""
+for I in 1 ; do
+    if test ! -f ark${I}isdone ; then
+	MISSING="${MISSING} ${I}"
+    fi
+done
+if test "${MISSING}" = "" ; then
+    echo You have the archive.
+    rm -f ark[1-9]isdone
+else
+    echo You still must unpack the following archives:
+    echo "        " ${MISSING}
+fi
+exit 0
+exit 0 # Just in case...

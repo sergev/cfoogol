@@ -1,38 +1,38 @@
 
-/*  fc.c  */  
-/*  A small public-domain compiler for an             */ 
-/*  Algol-like language.                              */ 
-/*  This compiler was written by Per Lindberg.        */ 
-/*  Version 5 changes by John Cowan                   */ 
-/*  <cowan@snark.thyrsus.com>                         */  
-/*  Header file fc.h added by Andy Elvey              */   
-/*  It was obtained from comp.sources.misc volume42   */  
+/*  fc.c  */
+/*  A small public-domain compiler for an             */
+/*  Algol-like language.                              */
+/*  This compiler was written by Per Lindberg.        */
+/*  Version 5 changes by John Cowan                   */
+/*  <cowan@snark.thyrsus.com>                         */
+/*  Header file fc.h added by Andy Elvey              */
+/*  It was obtained from comp.sources.misc volume42   */
 
-/*  USAGE - (after fc.c has been compiled)            */ 
-/*  fc infile outfile.c                               */ 
- 
-/*  It is based on the VALGOL I compiler published by */ 
-/*  G.A. Edgar in Dr. Dobb's Journal May 1985.        */  
-/*  It was implemented for the purpose of             */    
-/*	demonstrating how a simple compiler works.        */  
-/*  Therefore, there are no optimizations or other    */  
-/*  frills. You might want to add things to it;       */  
-/*  go right ahead. Happy hacking!                    */ 
+/*  USAGE - (after fc.c has been compiled)            */
+/*  fc infile outfile.c                               */
 
-/*  Very many thanks to Per Lindberg and John Cowan   */ 
-/*  for writing this code.                            */ 
+/*  It is based on the VALGOL I compiler published by */
+/*  G.A. Edgar in Dr. Dobb's Journal May 1985.        */
+/*  It was implemented for the purpose of             */
+/*	demonstrating how a simple compiler works.        */
+/*  Therefore, there are no optimizations or other    */
+/*  frills. You might want to add things to it;       */
+/*  go right ahead. Happy hacking!                    */
+
+/*  Very many thanks to Per Lindberg and John Cowan   */
+/*  for writing this code.                            */
 /*  This code is released to the public domain.       */
-/*  "Share and enjoy..."  ;)                          */  
+/*  "Share and enjoy..."  ;)                          */
 
 
 #define UNIX
 
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <unistd.h> 
-#include "fc.h" 
+#include <unistd.h>
+#include "fc.h"
 
 #define is_upper(c) ((c) >= 'A' && (c) <= 'Z')
 #define to_lower(c) ((c) - 'A' + 'a')
@@ -61,7 +61,7 @@ char token[MAXTOKEN],
      "usage: 'fc [-debug] infile [outfile]'";
 
 
-int main(int argc, char *argv[]) { 
+int main(int argc, char *argv[]) {
   if (argc < 2) error(usage);
   if (*argv[1] == '-') { debug = 1; --argc; ++argv; }
   if (argc < 2) error(usage);
@@ -71,9 +71,9 @@ int main(int argc, char *argv[]) {
   if (!PROGRAM()) error("Syntax error");
   fclose(inf);
   fclose(outf);
-  
-  return 0; 
-  
+
+  return 0;
+
 }
 
 
@@ -135,7 +135,7 @@ void error2(char *s1, char *s2) {
 
 void lowcase(char *s) {
   char c;
-  for ( (c = *s); (c = *s); ++s) 
+  for ( (c = *s); (c = *s); ++s)
     if (is_upper(c)) *s = to_lower(c) ;
 }
 
@@ -205,7 +205,7 @@ void get2(void) {
     }
     ungetc(c,inf);
   }
-  *p = '\0';  
+  *p = '\0';
 }
 
 
@@ -250,8 +250,8 @@ int number(char *name) {
   char c, *p = token;
   d("number",token,name);
   while ((c = *p++)) {
-    if (type(c) != NUMBER) return(0); 
-  }  
+    if (type(c) != NUMBER) return(0);
+  }
   enter(name,token);
   gettoken();
   return(1);
@@ -287,8 +287,8 @@ void enter(char *key, char *val) {
       return;
     }
   }
-  error2("INTERNAL SYMTAB ENTER ERROR, can't enter ", val); 
-  return;  
+  error2("INTERNAL SYMTAB ENTER ERROR, can't enter ", val);
+  return;
 }
 
 
@@ -300,8 +300,8 @@ int lookup(char *key) {
       return i;
     }
   }
-  error2("INTERNAL SYMTAB LOOKUP ERROR, can't find ", key); 
-  return -1; 
+  error2("INTERNAL SYMTAB LOOKUP ERROR, can't find ", key);
+  return -1;
 }
 
 
@@ -317,10 +317,10 @@ void remove_(char *key) {
 
 /* Syntax definition. This is the neat part! */
 
-int PROGRAM(void) { 
+int PROGRAM(void) {
   d("PROGRAM",token,pending);
   if (!match("begin"))	return 0;	out("#include <stdio.h>");
-                                        out("main() {");
+                                        out("int main() {");
   if (!OPT_DECLARATION()) return 0;
   if (!STATEMENT())	return 0;
   while (match(";"))
@@ -329,21 +329,21 @@ int PROGRAM(void) {
   return 1;
 }
 
-int OPT_DECLARATION(void) {  
+int OPT_DECLARATION(void) {
   d("OPT_DECLARATION",token,pending);
   if (DECLARATION()
   && !match(";")) return 0;
   return 1;
 }
 
-int DECLARATION(void) { 
+int DECLARATION(void) {
   d("DECLARATION",token,pending);
   if (!match("integer")) return 0;	out("int");
   if (!ID_SEQUENCE())	 return 0;	out(";");
   return 1;
 }
 
-int ID_SEQUENCE(void) { 
+int ID_SEQUENCE(void) {
   d("ID_SEQUENCE",token,pending);
   if (!IDENTIFIER())	return 0;
   while (match(",")) {
@@ -353,14 +353,14 @@ int ID_SEQUENCE(void) {
   return 1;
 }
 
-int IDENTIFIER(void) { 
+int IDENTIFIER(void) {
   d("IDENTIFIER",token,pending);
   if (!id("X"))	return 0;		out("'X'");
 	remove_("X");
   return 1;
 }
 
-int STATEMENT(void) { 
+int STATEMENT(void) {
   d("STATEMENT",token,pending);
   return
   IO_STATEMENT()
@@ -374,7 +374,7 @@ int STATEMENT(void) {
   ASSIGN_STATEMENT();
 }
 
-int BLOCK(void) { 
+int BLOCK(void) {
   d("BLOCK",token,pending);
   if (!match("begin"))	return 0;	out("{");
   if (DECL_OR_ST())
@@ -384,7 +384,7 @@ int BLOCK(void) {
   return 1;
 }
 
-int DECL_OR_ST(void) { 
+int DECL_OR_ST(void) {
   d("DECL_OR_ST",token,pending);
   return
   DECLARATION()
@@ -392,7 +392,7 @@ int DECL_OR_ST(void) {
   STATEMENT();
 }
 
-int IO_STATEMENT(void) { 
+int IO_STATEMENT(void) {
   d("IO_STATEMENT",token,pending);
   return
   PRINTS_STATEMENT()
@@ -402,18 +402,18 @@ int IO_STATEMENT(void) {
   PRINT_STATEMENT();
 }
 
-int PRINTS_STATEMENT(void) { 
+int PRINTS_STATEMENT(void) {
   d("PRINTS_STATEMENT",token,pending);
   if (!match("prints")) return 0;
   if (!match("("))	return 0;
-  if (!string("S"))	return 0;	
+  if (!string("S"))	return 0;
 	 out("printf(\"%s\", 'S');");
-	 remove_("S"); 
+	 remove_("S");
   if (!match(")"))	return 0;
   return 1;
 }
 
-int PRINTN_STATEMENT(void) { 
+int PRINTN_STATEMENT(void) {
   d("PRINTN_STATEMENT",token,pending);
   if (!match("printn")) return 0;
   if (!match("("))	return 0; out("printf(\"%d\",");
@@ -422,35 +422,35 @@ int PRINTN_STATEMENT(void) {
   return 1;
 }
 
-int PRINT_STATEMENT(void) { 
+int PRINT_STATEMENT(void) {
   d("PRINT_STATEMENT",token,pending);
   if (!match("print"))	return 0; out("printf(\"\\n\");");
   return 1;
 }
 
-int COND_STATEMENT(void) { 
+int COND_STATEMENT(void) {
   d("COND_STATEMENT",token,pending);
   if (!match("if"))	return 0;	out("if (");
   if (!EXPRESSION())	return 0;	out(")");
-  if (!match("then"))	return 0;	
-  if (!STATEMENT())	return 0;	
+  if (!match("then"))	return 0;
+  if (!STATEMENT())	return 0;
   if (match("else")) {
      out (" else");
-    if (!STATEMENT())	return 0;	
+    if (!STATEMENT())	return 0;
 	}
   return 1;
 }
 
-int WHILE_STATEMENT(void) { 
+int WHILE_STATEMENT(void) {
   d("WHILE_STATEMENT",token,pending);
   if (!match("while"))	return 0;  out("while(");
   if (!EXPRESSION())	return 0;  out(")");
-  if (!match("do"))	return 0;	
-  if(!STATEMENT())	return 0;	
+  if (!match("do"))	return 0;
+  if(!STATEMENT())	return 0;
   return 1;
 }
 
-int ASSIGN_STATEMENT(void) { 
+int ASSIGN_STATEMENT(void) {
   d("ASSIGN_STATEMENT",token,pending);
   if (!id("Var"))	return 0;       out("'Var' =");
   if (!match(":"))	return 0;
@@ -460,14 +460,14 @@ int ASSIGN_STATEMENT(void) {
   return 1;
 }
 
-int EXPRESSION(void) { 
+int EXPRESSION(void) {
   d("EXPRESSION",token,pending);
   if (!EXPR1())		return 0;
   if (!OPT_RHS())	return 0;
   return 1;
 }
 
-int OPT_RHS(void) { 
+int OPT_RHS(void) {
   d("OPT_RHS",token,pending);
   return
   RHS_EQ()
@@ -477,23 +477,23 @@ int OPT_RHS(void) {
   1;
 }
 
-int RHS_EQ(void) { 
+int RHS_EQ(void) {
   d("RHS_EQ",token,pending);
-  if (!match("="))	return 0;	
+  if (!match("="))	return 0;
 					out("==");
-  if (!EXPR1())		return 0;	
+  if (!EXPR1())		return 0;
   return 1;
 }
 
-int RHS_NEQ(void) { 
+int RHS_NEQ(void) {
   d("RHS_NEQ",token,pending);
-  if (!match("#"))	return 0;	
+  if (!match("#"))	return 0;
 					out("!=");
-  if (!EXPR1())		return 0;	
+  if (!EXPR1())		return 0;
   return 1;
 }
 
-int SIGNED_TERM(void) { 
+int SIGNED_TERM(void) {
   d("SIGNED_TERM",token,pending);
   return
   PLUS_TERM()
@@ -501,32 +501,32 @@ int SIGNED_TERM(void) {
   MINUS_TERM();
 }
 
-int PLUS_TERM(void) { 
+int PLUS_TERM(void) {
   d("PLUS_TERM",token,pending);
-  if (!match("+"))	return 0;	out("+");      
-  if (!TERM())		return 0;	
+  if (!match("+"))	return 0;	out("+");
+  if (!TERM())		return 0;
   return 1;
 }
 
-int MINUS_TERM(void) { 
+int MINUS_TERM(void) {
   d("MINUS_TERM",token,pending);
   if (!match("-"))	return 0;	out("-");
-  if (!TERM())		return 0;	
+  if (!TERM())		return 0;
   return 1;
 }
 
-int TERM(void) { 
+int TERM(void) {
   d("TERM",token,pending);
   if (!PRIMARY())	return 0;
   while (match("*")) { out("*");
-    if (!PRIMARY())	return 0;	
+    if (!PRIMARY())	return 0;
   }
   return 1;
 }
 
-int PRIMARY(void) { 
+int PRIMARY(void) {
   d("PRIMARY",token,pending);
-  if (id("Z")) { out("'Z'");       
+  if (id("Z")) { out("'Z'");
     remove_("Z");
     return 1;
   }
@@ -544,7 +544,7 @@ int PRIMARY(void) {
   return 0;
 }
 
-int EXPR1(void) { 
+int EXPR1(void) {
   d("EXPR1",token,pending);
   if (!TERM())		return 0;
   while(SIGNED_TERM());
@@ -563,8 +563,4 @@ int d(char *s1, char *s2, char *s3) {
   return 1;
 }
 
-/*  ***** END OF CODE *****  */  
-
-
- 
-
+/*  ***** END OF CODE *****  */
