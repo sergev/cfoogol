@@ -1,3 +1,5 @@
+CFLAGS  = -O -Wall -Werror
+
 all:    fc
 
 clean:

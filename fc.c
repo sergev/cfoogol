@@ -94,7 +94,6 @@ char *defaultext(char *fname, char *ext, int force) {
 
 
 void openinfile(char *fname) {
-  char *defaultext();
   d("openinfile",defaultext(fname,".foo",0),"");
   if ((inf = fopen(defaultext(fname,".foo",0),"r")) == NULL)
     error2("Can't open infile", defaultext(fname,".foo",0));
@@ -102,7 +101,6 @@ void openinfile(char *fname) {
 
 
 void openoutfile(char *fname) {
-  char *defaultext();
   d("openoutfile",defaultext(fname,".c",1),"");
   if ((outf = fopen(defaultext(fname,".c",1),"w")) == NULL)
     error2("Can't open outfile", defaultext(fname,".c",1));
@@ -143,7 +141,7 @@ void lowcase(char *s) {
 /* Basic I/O functions */
 
 int out(char *line) {
-  char c, symb[MAXTOKEN], *subst(), *s = symb;
+  char c, symb[MAXTOKEN], *s = symb;
   int printmode = 1, chmode = 1;
   while((c = *line++)) {
     if (c == ' ') { if (chmode) putc('\t',outf);
