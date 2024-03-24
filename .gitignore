@@ -1,8 +1,8 @@
 *.o
 fc
 
-test
-test.c
+primes
+primes.c
 
 hello
 hello.c
