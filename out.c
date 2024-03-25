@@ -1,22 +1,19 @@
 #include	<stdio.h>
 int	main()	{
 int
-n
+n=0
 ,
-div
+div=0
 ,
-sub
+sub=0
 ,
-test
+test=0
 ,
-testcopy
+testcopy=0
 ,
-found
+found=0
 ,
-max
-;
-n	=
-0
+max=0
 ;
 test	=
 2

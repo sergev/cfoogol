@@ -407,7 +407,7 @@ int IDENTIFIER(void)
     d("IDENTIFIER", token, pending);
     if (!id("X"))
         return 0;
-    out("'X'");
+    out("'X'=0");
     remove_("X");
     return 1;
 }
